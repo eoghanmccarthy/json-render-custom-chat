@@ -9,7 +9,8 @@ export const getPost = tool({
   }),
   execute: async ({ id }) => {
     try {
-      const res = await fetch(`${process.env.BLOG_API_BASE}/v1/posts/${id}`);
+      // const res = await fetch(`${process.env.BLOG_API_BASE}/v1/posts/${id}`);
+      const res = await fetch(`${process.env.BLOG_API_BASE}/posts/${id}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to fetch post");
       return { post: json };

@@ -348,7 +348,7 @@ export function ChatComponent() {
       {/* Header */}
       <header className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Chat demo</h1>
+          <h1 className="text-lg font-semibold">Blog demo</h1>
         </div>
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
@@ -433,7 +433,7 @@ export function ChatComponent() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              isEmpty ? "e.g., Compare weather in NYC, London, and Tokyo..." : "Ask a follow-up..."
+              isEmpty ? "e.g., Show me all my blog posts..." : "Ask a follow-up..."
             }
             rows={2}
             className="w-full resize-none rounded-xl border border-input bg-card px-4 py-3 pr-12 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

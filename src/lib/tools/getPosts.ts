@@ -10,7 +10,8 @@ export const getPosts = tool({
   execute: async ({ limit }) => {
     try {
       const query = limit ? `?limit=${limit}` : "";
-      const res = await fetch(`${process.env.BLOG_API_BASE}/v1/posts${query}`);
+      // const res = await fetch(`${process.env.BLOG_API_BASE}/v1/posts${query}`);
+      const res = await fetch(`${process.env.BLOG_API_BASE}/posts`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to fetch posts");
       return { posts: json };
