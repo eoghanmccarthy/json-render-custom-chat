@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import { SPEC_DATA_PART_TYPE } from "@json-render/core";
 import type { SpecDataPart, SPEC_DATA_PART } from "@json-render/core";
 import { useJsonRenderMessage } from "@json-render/react";
-import { ArrowDown, ArrowUp, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { ArrowUp, ChevronRight, Sparkles } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 
 import { ExplorerRenderer } from "@/lib/render/renderer";
+
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
+import { SpeechInput, type SpeechInputHandle } from "@/components/ai-elements/speech-input";
+import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 
 // =============================================================================
 // Types
@@ -255,70 +260,18 @@ function MessageBubble({
 
 export function ChatComponent() {
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLElement>(null);
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const isStickToBottom = useRef(true);
-  const isAutoScrolling = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const speechInputRef = useRef<SpeechInputHandle>(null);
 
   const { messages, sendMessage, setMessages, status, error } = useChat<AppMessage>({ transport });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
-  // Track whether the user has scrolled away from the bottom.
-  // During programmatic scrolling, suppress button updates until we arrive.
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const THRESHOLD = 80;
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - THRESHOLD;
-
-      if (isAutoScrolling.current) {
-        // Wait for the programmatic scroll to reach the bottom before
-        // handing control back to the user-scroll tracker.
-        if (atBottom) {
-          isAutoScrolling.current = false;
-        }
-        return;
-      }
-
-      isStickToBottom.current = atBottom;
-      setShowScrollButton(!atBottom);
-    };
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Auto-scroll to bottom on new messages, unless user scrolled up.
-  // Uses instant scrollTop assignment (no smooth animation) to avoid
-  // an ongoing animation that fights user scroll input.
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || !isStickToBottom.current) return;
-    isAutoScrolling.current = true;
-    container.scrollTop = container.scrollHeight;
-    requestAnimationFrame(() => {
-      isAutoScrolling.current = false;
-    });
-  }, [messages, isStreaming]);
-
-  const scrollToBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    isStickToBottom.current = true;
-    setShowScrollButton(false);
-    isAutoScrolling.current = true;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    // isAutoScrolling is cleared by the scroll handler once it reaches bottom
-  }, []);
-
   const handleSubmit = useCallback(
     async (text?: string) => {
       const message = text || input;
       if (!message.trim() || isStreaming) return;
+      speechInputRef.current?.stop();
       setInput("");
       await sendMessage({ text: message.trim() });
     },
@@ -334,6 +287,10 @@ export function ChatComponent() {
     },
     [handleSubmit],
   );
+
+  const handleTranscription = useCallback((text: string) => {
+    setInput((prev) => (prev ? `${prev} ${text}` : text));
+  }, []);
 
   const handleClear = useCallback(() => {
     setMessages([]);
@@ -363,36 +320,34 @@ export function ChatComponent() {
       </header>
 
       {/* Messages area */}
-      <main ref={scrollContainerRef} className="flex-1 overflow-auto">
+      <Conversation className="flex-1">
         {isEmpty ? (
-          /* Empty state */
-          <div className="h-full flex flex-col items-center justify-center px-6 py-12">
-            <div className="max-w-2xl w-full space-y-8">
-              <div className="text-center space-y-2">
-                <h2 className="text-2xl font-semibold tracking-tight">Manage your blog</h2>
-                <p className="text-muted-foreground">
-                  List your posts, create new ones, or edit and delete existing ones.
-                </p>
+          <ConversationContent className="min-h-full">
+            <ConversationEmptyState>
+              <div className="max-w-2xl w-full space-y-8">
+                <div className="text-center space-y-2">
+                  <h2 className="text-2xl font-semibold tracking-tight">Manage your blog</h2>
+                  <p className="text-muted-foreground">
+                    List your posts, create new ones, or edit and delete existing ones.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s.label}
+                      onClick={() => handleSubmit(s.prompt)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-
-              {/* Suggestions */}
-              <div className="flex flex-wrap gap-2 justify-center">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s.label}
-                    onClick={() => handleSubmit(s.prompt)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+            </ConversationEmptyState>
+          </ConversationContent>
         ) : (
-          /* Message thread */
-          <div className="max-w-4xl mx-auto px-10 py-6 space-y-6">
+          <ConversationContent className="max-w-4xl mx-auto px-10 py-6">
             {messages.map((message, index) => (
               <MessageBubble
                 key={message.id}
@@ -401,33 +356,20 @@ export function ChatComponent() {
                 isStreaming={isStreaming}
               />
             ))}
-
-            {/* Error display */}
             {error && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error.message}
               </div>
             )}
-
-            <div ref={messagesEndRef} />
-          </div>
+          </ConversationContent>
         )}
-      </main>
+        <ConversationScrollButton />
+      </Conversation>
 
-      {/* Input bar - always visible at bottom */}
-      <div className="px-6 pb-3 flex-shrink-0 bg-background relative">
-        {/* Scroll to bottom button */}
-        {showScrollButton && !isEmpty && (
-          <button
-            onClick={scrollToBottom}
-            className="absolute left-1/2 -translate-x-1/2 -top-10 z-10 h-8 w-8 rounded-full border border-border bg-background text-muted-foreground shadow-md flex items-center justify-center hover:text-foreground hover:bg-accent transition-colors"
-            aria-label="Scroll to bottom"
-          >
-            <ArrowDown className="h-4 w-4" />
-          </button>
-        )}
-        <div className="max-w-4xl mx-auto relative">
-          <textarea
+      {/* Input bar */}
+      <div className="px-6 pb-3 flex-shrink-0 bg-background">
+        <InputGroup className="max-w-4xl mx-auto rounded-xl bg-card shadow-sm">
+          <InputGroupTextarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -436,21 +378,30 @@ export function ChatComponent() {
               isEmpty ? "e.g., Show me all my blog posts..." : "Ask a follow-up..."
             }
             rows={2}
-            className="w-full resize-none rounded-xl border border-input bg-card px-4 py-3 pr-12 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             autoFocus
           />
-          <button
-            onClick={() => handleSubmit()}
-            disabled={!input.trim() || isStreaming}
-            className="absolute right-3 bottom-3 h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isStreaming ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowUp className="h-4 w-4" />
-            )}
-          </button>
-        </div>
+          <InputGroupAddon align="block-end" className="justify-end gap-1">
+            <SpeechInput
+              ref={speechInputRef}
+              onTranscriptionChange={handleTranscription}
+              size="icon-sm"
+              variant="ghost"
+              disabled={isStreaming}
+            />
+            <InputGroupButton
+              size="icon-sm"
+              variant="default"
+              onClick={() => handleSubmit()}
+              disabled={!input.trim() || isStreaming}
+            >
+              {isStreaming ? (
+                <Spinner />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
       </div>
     </div>
   );
