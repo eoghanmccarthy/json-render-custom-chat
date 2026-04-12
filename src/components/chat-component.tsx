@@ -17,6 +17,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } fro
 import { Spinner } from "@/components/ui/spinner";
 import { SpeechInput, type SpeechInputHandle } from "@/components/ai-elements/speech-input";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 
 // =============================================================================
 // Types
@@ -331,18 +332,18 @@ export function ChatComponent() {
                     List your posts, create new ones, or edit and delete existing ones.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2 justify-center">
+                <Suggestions className="w-full justify-center">
                   {SUGGESTIONS.map((s) => (
-                    <button
+                    <Suggestion
                       key={s.label}
-                      onClick={() => handleSubmit(s.prompt)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      suggestion={s.prompt}
+                      onClick={handleSubmit}
                     >
                       <Sparkles className="h-3 w-3" />
                       {s.label}
-                    </button>
+                    </Suggestion>
                   ))}
-                </div>
+                </Suggestions>
               </div>
             </ConversationEmptyState>
           </ConversationContent>
@@ -377,7 +378,7 @@ export function ChatComponent() {
             placeholder={
               isEmpty ? "e.g., Show me all my blog posts..." : "Ask a follow-up..."
             }
-            rows={2}
+            className="field-sizing-content min-h-16 max-h-48 px-4"
             autoFocus
           />
           <InputGroupAddon align="block-end" className="justify-end gap-1">
