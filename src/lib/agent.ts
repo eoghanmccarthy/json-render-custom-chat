@@ -1,4 +1,5 @@
 import { ToolLoopAgent, stepCountIs } from "ai";
+// import { google } from "@ai-sdk/google";
 
 import { catalog } from "./render/catalog";
 import { webSearch } from "./tools/search";
@@ -45,6 +46,7 @@ ${catalog.prompt({
 
 export const agent = new ToolLoopAgent({
   model: process.env.AI_GATEWAY_MODEL || DEFAULT_MODEL,
+  // model: google("gemini-2.0-flash"),
   instructions: AGENT_INSTRUCTIONS,
   tools: {
     webSearch,

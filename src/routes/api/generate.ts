@@ -22,11 +22,18 @@ export const Route = createFileRoute("/api/generate")({
         }
 
         const modelMessages = await convertToModelMessages(uiMessages);
+        // Calls the LLM API via ToolLoopAgent (model + API key configured in src/lib/agent.ts)
         const result = await agent.stream({ messages: modelMessages });
 
+        // Wraps the LLM stream into the AI SDK UI message format that useChat expects on the client
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
             writer.merge(pipeJsonRender(result.toUIMessageStream()));
+          },
+          onFinish: async ({ messages }) => {
+            console.log("Generated messages:", JSON.stringify(messages, null, 2));
+            // TODO: save messages to DB
+            // e.g. await db.saveMessages(chatId, messages);
           },
         });
 

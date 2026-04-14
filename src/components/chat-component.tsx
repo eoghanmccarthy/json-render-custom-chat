@@ -7,17 +7,36 @@ import type { UIMessage } from "ai";
 import { SPEC_DATA_PART_TYPE } from "@json-render/core";
 import type { SpecDataPart, SPEC_DATA_PART } from "@json-render/core";
 import { useJsonRenderMessage } from "@json-render/react";
-import { ArrowUp, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight, Sparkles } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 
 import { ExplorerRenderer } from "@/lib/render/renderer";
 
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
-import { Spinner } from "@/components/ui/spinner";
 import { SpeechInput, type SpeechInputHandle } from "@/components/ai-elements/speech-input";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import {
+  Attachments,
+  Attachment,
+  AttachmentPreview,
+  AttachmentInfo,
+  AttachmentRemove,
+} from "@/components/ai-elements/attachments";
+import {
+  PromptInput,
+  PromptInputProvider,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputTools,
+  PromptInputSubmit,
+  PromptInputActionMenu,
+  PromptInputActionMenuTrigger,
+  PromptInputActionMenuContent,
+  PromptInputActionAddAttachments,
+  usePromptInputController,
+  type PromptInputMessage,
+} from "@/components/ai-elements/prompt-input";
 
 // =============================================================================
 // Types
@@ -256,65 +275,118 @@ function MessageBubble({
 }
 
 // =============================================================================
+// Chat Input (inner — needs access to PromptInputProvider context)
+// =============================================================================
+
+function ChatInput({
+  speechInputRef,
+  status,
+  stop,
+  isStreaming,
+  isEmpty,
+  onSubmit,
+}: {
+  speechInputRef: React.RefObject<SpeechInputHandle | null>;
+  status: ReturnType<typeof useChat>["status"];
+  stop: () => void;
+  isStreaming: boolean;
+  isEmpty: boolean;
+  onSubmit: (message: PromptInputMessage) => Promise<void>;
+}) {
+  const { textInput, attachments } = usePromptInputController();
+
+  const handleTranscription = useCallback(
+    (text: string) => {
+      textInput.setInput(textInput.value ? `${textInput.value} ${text}` : text);
+    },
+    [textInput],
+  );
+
+  return (
+    <PromptInput
+      className="max-w-3xl mx-auto rounded-xl bg-background shadow-md border"
+      onSubmit={onSubmit}
+    >
+      {attachments.files.length > 0 && (
+          <div className="p-3 pb-2 w-full">
+            <Attachments variant="grid" className="mr-auto ml-0">
+              {attachments.files.map((file) => (
+                  <Attachment key={file.id} data={file} onRemove={() => attachments.remove(file.id)}>
+                    <AttachmentPreview />
+                    <AttachmentInfo />
+                    <AttachmentRemove />
+                  </Attachment>
+              ))}
+            </Attachments>
+          </div>
+      )}
+      <PromptInputTextarea
+        placeholder={isEmpty ? "e.g., Show me all my blog posts..." : "Ask a follow-up..."}
+        autoFocus
+      />
+      <PromptInputFooter>
+        <PromptInputTools>
+          <SpeechInput
+            ref={speechInputRef}
+            onTranscriptionChange={handleTranscription}
+            size="icon-sm"
+            variant="ghost"
+            disabled={isStreaming}
+          />
+          <PromptInputActionMenu>
+            <PromptInputActionMenuTrigger />
+            <PromptInputActionMenuContent side="top" className="min-w-48">
+              <PromptInputActionAddAttachments />
+            </PromptInputActionMenuContent>
+          </PromptInputActionMenu>
+        </PromptInputTools>
+        <PromptInputSubmit
+          status={status}
+          onStop={stop}
+          disabled={!textInput.value.trim() && !isStreaming}
+        />
+      </PromptInputFooter>
+    </PromptInput>
+  );
+}
+
+// =============================================================================
 // Page
 // =============================================================================
 
 export function ChatComponent() {
-  const [input, setInput] = useState("");
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const speechInputRef = useRef<SpeechInputHandle>(null);
 
-  const { messages, sendMessage, setMessages, status, error } = useChat<AppMessage>({ transport });
+  const { messages, sendMessage, setMessages, status, stop, error } = useChat<AppMessage>({ transport });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
-  const handleSubmit = useCallback(
-    async (text?: string) => {
-      const message = text || input;
-      if (!message.trim() || isStreaming) return;
+  const handleSuggestion = useCallback(
+    async (text: string) => {
+      if (!text.trim() || isStreaming) return;
       speechInputRef.current?.stop();
-      setInput("");
-      await sendMessage({ text: message.trim() });
+      await sendMessage({ text: text.trim() });
     },
-    [input, isStreaming, sendMessage],
+    [isStreaming, sendMessage],
   );
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
-
-  const handleTranscription = useCallback((text: string) => {
-    setInput((prev) => (prev ? `${prev} ${text}` : text));
-  }, []);
 
   const handleClear = useCallback(() => {
     setMessages([]);
-    setInput("");
-    inputRef.current?.focus();
   }, [setMessages]);
 
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden bg-muted/40">
       {/* Header */}
-      <header className="border-b px-6 py-3 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Blog demo</h1>
-        </div>
+      <header className="border-b px-6 h-14 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
             <button
               onClick={handleClear}
               className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
-              Start Over
+              New chat
             </button>
           )}
         </div>
@@ -326,18 +398,15 @@ export function ChatComponent() {
           <ConversationContent className="min-h-full">
             <ConversationEmptyState>
               <div className="max-w-2xl w-full space-y-8">
-                <div className="text-center space-y-2">
-                  <h2 className="text-2xl font-semibold tracking-tight">Manage your blog</h2>
-                  <p className="text-muted-foreground">
-                    List your posts, create new ones, or edit and delete existing ones.
-                  </p>
+                <div className="text-center">
+                  <h2 className="text-2xl font-semibold tracking-tight">What would you like to do today?</h2>
                 </div>
                 <Suggestions className="w-full justify-center">
                   {SUGGESTIONS.map((s) => (
                     <Suggestion
                       key={s.label}
                       suggestion={s.prompt}
-                      onClick={handleSubmit}
+                      onClick={handleSuggestion}
                     >
                       <Sparkles className="h-3 w-3" />
                       {s.label}
@@ -348,7 +417,7 @@ export function ChatComponent() {
             </ConversationEmptyState>
           </ConversationContent>
         ) : (
-          <ConversationContent className="max-w-4xl mx-auto px-10 py-6">
+          <ConversationContent className="max-w-3xl mx-auto px-10 py-6">
             {messages.map((message, index) => (
               <MessageBubble
                 key={message.id}
@@ -368,41 +437,24 @@ export function ChatComponent() {
       </Conversation>
 
       {/* Input bar */}
-      <div className="px-6 pb-3 flex-shrink-0 bg-background">
-        <InputGroup className="max-w-4xl mx-auto rounded-xl bg-card shadow-sm">
-          <InputGroupTextarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isEmpty ? "e.g., Show me all my blog posts..." : "Ask a follow-up..."
-            }
-            className="field-sizing-content min-h-16 max-h-48 px-4"
-            autoFocus
+      <div className="px-6 pb-12 flex-shrink-0">
+        <PromptInputProvider>
+          <ChatInput
+            speechInputRef={speechInputRef}
+            status={status}
+            stop={stop}
+            isStreaming={isStreaming}
+            isEmpty={isEmpty}
+            onSubmit={async ({ text, files }) => {
+              if (!text.trim() && files.length === 0) return;
+              speechInputRef.current?.stop();
+              await sendMessage({
+                text: text.trim(),
+                files,
+              });
+            }}
           />
-          <InputGroupAddon align="block-end" className="justify-end gap-1">
-            <SpeechInput
-              ref={speechInputRef}
-              onTranscriptionChange={handleTranscription}
-              size="icon-sm"
-              variant="ghost"
-              disabled={isStreaming}
-            />
-            <InputGroupButton
-              size="icon-sm"
-              variant="default"
-              onClick={() => handleSubmit()}
-              disabled={!input.trim() || isStreaming}
-            >
-              {isStreaming ? (
-                <Spinner />
-              ) : (
-                <ArrowUp className="h-4 w-4" />
-              )}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
+        </PromptInputProvider>
       </div>
     </div>
   );
